@@ -1,5 +1,7 @@
 # Experiment Watchdog
 
+[![Offline watchdog tests](https://github.com/ChihyunAhn0309/experiment-watchdog/actions/workflows/tests.yml/badge.svg)](https://github.com/ChihyunAhn0309/experiment-watchdog/actions/workflows/tests.yml)
+
 Keep long-running experiments under local supervision. Invoke Codex only after a failure to diagnose, repair, validate, and restart the same experiment command.
 
 **Healthy monitoring makes zero model inference calls.** A small Python process checks the experiment locally. Setup conversations and actual Codex repairs use normal account usage or API billing. GPU, electricity, and experiment-specific API costs are separate.

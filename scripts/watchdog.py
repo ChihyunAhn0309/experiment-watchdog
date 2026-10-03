@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import ctypes
 import hashlib
 import json
@@ -362,18 +363,22 @@ class Child:
 
     def _pump(self):
         try:
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             while True:
                 chunk = self.p.stdout.read(4096)
-                if not chunk:
-                    break
-                self.tail.extend(chunk)
-                if len(self.tail) > self.tail_bytes:
-                    del self.tail[:-self.tail_bytes]
-                self.logs.write(self.label, chunk)
+                if chunk:
+                    self.tail.extend(chunk)
+                    if len(self.tail) > self.tail_bytes:
+                        del self.tail[:-self.tail_bytes]
+                    self.logs.write(self.label, chunk)
                 if self.patterns:
-                    self.buf = (self.buf + chunk.decode("utf-8", errors="replace"))[-65536:]
+                    # A UTF-8 character can span OS pipe reads. Preserve its
+                    # partial bytes, including the final decoder flush at EOF.
+                    self.buf = (self.buf + decoder.decode(chunk, final=not chunk))[-65536:]
                     if self.failure is None and any(p.search(self.buf) for p in self.patterns):
                         self.failure = "Configured fatal log pattern matched"
+                if not chunk:
+                    break
         except Exception as e:
             self.error = str(e)
         finally:
@@ -847,7 +852,8 @@ def main():
         time.sleep(.7)
         if child.poll() is not None:
             current = read_json(root / "state.json") if (root / "state.json").exists() else {}
-            if current.get("supervisor_pid") == child.pid:
+            if (current.get("supervisor_pid") == child.pid or
+                    (args.resume and child.returncode == 0 and current.get("phase") == "completed")):
                 print(json.dumps(current, ensure_ascii=False))
                 return child.returncode
             raise RuntimeError("Watchdog could not start; run in foreground to see the error (no model implied)")

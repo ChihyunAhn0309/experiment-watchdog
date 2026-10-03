@@ -460,6 +460,25 @@ Path(args[args.index('-o')+1]).write_text(json.dumps({
         self.assertIsNotNone(reason)
         self.assertFalse(supervisor.state["retryable_exit"])
 
+    def test_split_utf8_fatal_output_is_detected(self):
+        self.cfg["repair"]["enabled"] = False
+        self.cfg["failure_regex"] = ["치명적 오류"]
+        self.experiment("import os,time\nraw='치명적 오류'.encode('utf-8')\nos.write(1,b'A'*4095+raw[:1]); time.sleep(.15)\nos.write(1,raw[1:]); time.sleep(.15)\n")
+        result = self.run_watch()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("fatal log pattern", self.state()["failure"])
+        self.assertEqual(self.calls(), 0)
+
+    def test_detached_resume_of_completed_run_is_successful_noop(self):
+        self.experiment("from pathlib import Path\np=Path('launches')\np.write_text(str(int(p.read_text())+1) if p.exists() else '1')\n")
+        self.assertEqual(self.run_watch().returncode, 0)
+        result = subprocess.run([sys.executable, SCRIPT, "start", "--config", str(self.path), "--resume"],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["phase"], "completed")
+        self.assertEqual((self.root / "launches").read_text(), "1")
+        self.assertEqual(self.calls(), 0)
+
     def test_local_backoff_is_capped_with_jitter(self):
         policy = dict(self.cfg["local_retry"], delay_seconds=2, backoff=2, max_delay_seconds=9, jitter_fraction=.5)
         with patch.object(wd.random, "uniform", return_value=.5):
