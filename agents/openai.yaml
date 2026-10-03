@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experiment Watchdog"
+  short_description: "Zero-token monitoring; repair only after failure"
+  default_prompt: "Use $experiment-watchdog to supervise this experiment locally and invoke Codex only after a confirmed failure."

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.state/
+watchdog.json
+watchdog-*.json
+*.log
+.env
+.env.*
+!.env.example
+
