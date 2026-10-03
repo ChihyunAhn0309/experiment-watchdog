@@ -285,7 +285,11 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual((self.root / "ticks").read_text(), before)
 
     def test_crash_state_cannot_automatically_duplicate_work(self):
-        identity = wd.hashlib.sha256(json.dumps([self.cfg["project_dir"], self.cfg["command"]], ensure_ascii=False).encode()).hexdigest()
+        # Config loading resolves directory spelling (including Windows runner
+        # short paths/case); synthetic crash state must use that same identity.
+        self.write()
+        loaded = wd.config_load(self.path)
+        identity = wd.hashlib.sha256(json.dumps([loaded["project_dir"], loaded["command"]], ensure_ascii=False).encode()).hexdigest()
         wd.atomic_json(self.root / "state" / "state.json", {"identity": identity, "phase": "repairing", "repair_attempts": 1})
         self.experiment("sys.exit(0)\n")
         p = self.run_watch(resume=True)
@@ -432,6 +436,29 @@ Path(args[args.index('-o')+1]).write_text(json.dumps({
         self.experiment("report('blocked',message='manual intervention required')\nsys.exit(75)\n")
         self.assertEqual(self.run_watch().returncode, 2)
         self.assertEqual(self.state()["local_retry_attempts"], 0)
+
+    def test_fatal_pattern_found_during_final_drain_disallows_local_retry(self):
+        class ExitedProcess:
+            pid = 12345
+            def poll(self):
+                return 75
+
+        class LateFatalChild:
+            def __init__(self, *args, **kwargs):
+                self.p = ExitedProcess()
+                self.failure = None
+                self.error = None
+
+            def close(self):
+                self.failure = "Configured fatal log pattern matched"
+                return "FATAL: invalid dataset"
+
+        supervisor = wd.Supervisor(self.cfg)
+        supervisor.state = {"attempt": 0}
+        with patch.object(wd, "Child", LateFatalChild):
+            reason, _ = supervisor.experiment()
+        self.assertIsNotNone(reason)
+        self.assertFalse(supervisor.state["retryable_exit"])
 
     def test_local_backoff_is_capped_with_jitter(self):
         policy = dict(self.cfg["local_retry"], delay_seconds=2, backoff=2, max_delay_seconds=9, jitter_fraction=.5)

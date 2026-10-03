@@ -669,7 +669,8 @@ class Supervisor:
         explicit_terminal = isinstance(final, dict) and final.get("run_id") == run_id and final.get("status") in {"failed", "blocked", "stopped", "cancelled"}
         self.state.update(exit_code=observed_rc,
                           retryable_exit=observed_rc is not None and observed_rc > 0
-                          and reason == f"Experiment exited with code {observed_rc}" and not explicit_terminal)
+                          and reason == f"Experiment exited with code {observed_rc}"
+                          and not explicit_terminal and not self.child.failure)
         self.child = None
         return reason, tail
 
